@@ -1,6 +1,6 @@
 # A simple Flask app container.
 FROM python:3-buster
-LABEL maintainer="Jeff Geerling"
+LABEL maintainer="Aaron Langford"
 
 # Place app in container.
 COPY . /opt/www
