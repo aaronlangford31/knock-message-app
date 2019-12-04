@@ -1,111 +1,64 @@
-# Docker Examples - by geerlingguy
+# Flask App with MySQL Database
 
-[![Build Status](https://travis-ci.org/geerlingguy/docker-examples.svg?branch=master)](https://travis-ci.org/geerlingguy/docker-examples)
+## Quick Start
 
-The web is full of Docker examples and tutorials and repos.
+  1. Run `docker-compose up`
+  2. Visit `http://localhost/` in your browser.
 
-There are many like it, but this one is mine.
+## Description
 
-## Philosophy
+[Flask](http://flask.pocoo.org/) is a web development microframework for Python. It's efficient, easy-to-use, and easy-to-deploy!
 
-I like learning from first principles. Docker masks a surprising amount of complexity, and most tutorials try to gloss over them to show 'the cool shiny things' before you can even understand what's going on.
+I often use Flask when building small webservices or dynamic websites and feel like trying something fresh and different from PHP, my daily driver. Most webservices and sites require some sort of database to store data, so we need to create not one but _two_ Docker containers, and link them together:
 
-I'd rather start really simple, and build from there until I fully understand what's going on. Therefore the examples in this repo build on each other until we get to some actual 'this could do something useful' kinds of infrastructure.
+  1. Flask container (with Python).
+  2. MySQL container
 
-## Installation
+In early examples, we would build or import just one container and work with it to run some code. In real-world usage, you'll often need two, three, or even _dozens_ of containers to support the project you're working on!
 
-  1. Install [Docker for Mac](https://www.docker.com/products/docker#/mac).
-  2. Start Docker.app
-  3. Open Terminal, make sure it's running with `docker --version`.
+It would get quite unweildy to have to manage all of these containers with separate `run` and `stop` commands, so Docker has an answer: `docker-compose`.
 
-## Getting Started
+## Docker Compose
 
-### First Docker command
+Notes:
 
-To kick the tires and make sure things are working, run:
+  - [`docker-compose`](https://docs.docker.com/compose/reference/)
+  - [`up`](https://docs.docker.com/compose/reference/up/)
 
-    docker run hello-world
+## Persisting Data
 
-This command is doing the following:
+One thing repeated early and often in the world of Docker is _data stored inside a container is not persisted_. So... this creates quite the conundrum: what if you need data to persist after a container exits?
 
-  - [`docker`](https://docs.docker.com/engine/reference/commandline/cli/) - The main Docker command.
-  - [`run`](https://docs.docker.com/engine/reference/run/) - Run a container.
-  - `hello-world` - The name of the Docker Hub repository to pull from. In this case, we'll get the latest [`hello-world`](https://hub.docker.com/_/hello-world/) Docker image. If you don't specify a version, this is interpreted as `hello-world:latest`.
+Traditionally, Docker allowed the use of 'data containers' which would contain a `VOLUME` and nothing else, based on a really tiny base image, then you use `volumes_from` or `-v` to link the volume at the specified path into a container.
 
-If things are working correctly, you should see some output, then the container will exit.
+In our case, we want to explicitly state that we want the path `/var/lib/mysql` to persist as a volume separate from the general `db` volume. This way if you build the Database container, store some data inside a MySQL database that's stored within that path, then exit, you can run the Database container again later, and the data you stored earlier won't have vanished!
 
-### First real-world example - Simple Nginx Webserver
+We did this inside the `docker-compose.yml` file here:
 
-Docker's [tutorial](https://docs.docker.com/docker-for-mac/) provides a simple example of running an Nginx webserver on localhost with the command:
+    services:
+      ...
+      db:
+        ...
+        volumes:
+          - /var/lib/mysql
 
-    docker run -d -p 80:80 --name webserver nginx
+The official MySQL image adds it's own `VOLUME` directive in its Dockerfile, so it's not necessary for us to specify the volume in our own `docker-compose` configuration... but I like to be explicit about things like _where my important data is stored_!
 
-This command is doing the following:
+After you bring up the containers, you can inspect the `db` container to ensure the volume is configured correctly: `docker inspect flask_db_1` — this displays all the container info, including a list of 'Volumes'.
 
-  - [`docker`](https://docs.docker.com/engine/reference/commandline/cli/) - The main Docker command.
-  - [`run`](https://docs.docker.com/engine/reference/run/) - Run a container.
-  - [`-d`](https://docs.docker.com/engine/reference/run/#/detached-d) - Run a container detached; when the process (nginx, in this case) exits, the container will exit.
-  - [`-p 80:80`](https://docs.docker.com/engine/reference/commandline/run/#/publish-or-expose-port-p-expose) - Publish or expose a port (`[host-port]:[container-port]`, so in this case bind the container's port `80` to the host's port `80`).
-  - [`--name webserver`](https://docs.docker.com/engine/reference/commandline/run/#/assign-name-and-allocate-pseudo-tty-name-it) - Assign a name to a container.
-  - `nginx` - The name of the Docker Hub repository to pull from. In this case, we'll get the latest [`nginx`](https://hub.docker.com/_/nginx/) Docker image. If you don't specify a version, this is interpreted as `nginx:latest`.
+You can also mount a directory on the host as a vlume using the syntax `[host-path]:[container-path]`, so if you want to mount a `database` directory in your project folder as `/var/lib/mysql`, change the the volume like so:
 
-The first time you run this command, it will download the Nginx Docker image (it actually downloads a few 'layers' which build up the official image), then run a container based on the image.
+    services:
+      ...
+      db:
+        ...
+        volumes:
+          - ./database:/var/lib/mysql
 
-Run the command, then access `http://localhost:80/` in a web browser. You should see the 'Welcome to nginx!' page.
+If you change the volume settings, then you will need to `stop` any running containers, then `rm` them and rebuild before the changes take effect (remember, containers are immutable!).
 
-#### Playing with the Nginx container
+Read more: [Manage data in containers](https://docs.docker.com/engine/tutorials/dockervolumes/)
 
-  - Run `docker ps` to see a list of running containers; you should see the Nginx container you just started in the list.
-  - Run `docker stop webserver` to stop the named container (you can also use the 'container ID' if you want).
-  - Run `docker ps -a` to see a list of all containers on the system, including stopped containers.
-  - Run `docker start webserver` to start the named container again.
-  - Run `docker rm webserver` to delete the container entirely (you can also pass `--rm` to the `run` command if you want the container deleted after it exits).
-
-> Note: Starting and stopping a container is usually quicker than building it from scratch with `docker run`, so if possible, it's best to generate the container with `run` once and use `start`/`stop` until you need to rebuild the container.
-
-### Second real-world example - Simple Python Flask App
-
-Docker has another [tutorial](https://docs.docker.com/engine/tutorials/usingdocker/) that digs a little deeper into Docker CLI usage, but for our purposes, we'll just run the main command, and this time allow Docker to map an ephemeral port (any available high port number on our host) to the port configured in the container's configuration:
-
-    docker run -d -P training/webapp python app.py
-
-Besides the obvious, this command is doing a couple new things:
-
-  - [`-P`](https://docs.docker.com/engine/reference/run/#/expose-incoming-ports) - Publish all ports that are `EXPOSE`d by the docker container to ephemeral ports on the host (unlike `-p`, which requires specification of each port mapping).
-  - `training/webapp` - The name of the Docker Hub repository to pull from. In this case we'll get the latest [`training/webapp`](https://hub.docker.com/r/training/webapp/) Docker image.
-  - `python app.py` - This is the command that will be run inside the container when it's launched. Until the `app.py` exits, or you `docker stop` or `docker kill` the container, it will keep running.
-
-Once the container is started, run `docker ps` to see what host port the container is bound to, then visit that port in your browser, e.g. `http://localhost:32768/`. You should see the text "Hello world!" in your browser.
-
-Since we didn't specify a `--name` when we ran this `docker run` command, Docker assigned a random name to the container (in my case, `romantic_bell`), so to `stop`, `rm`, or otherwise interact with the container, you have to use the generated name or the container ID.
-
-### Other Essential commands
-
-At this point, you should be somewhat familiar with the main Docker CLI. Some other commands that come in handy at this point are:
-
-  - `docker images`: Show a list of all images you have downloaded locally.
-  - `docker rmi [image-name]`: Remove a particular image (save some disk space!).
-  - `docker logs [container-name]`: Tail the logs (stdout) of a container (try this on the Flask app while refreshing the page!).
-
-## Diving Deeper
-
-Other examples warrant their own dedicated directories, with example code and individual detailed README's explaining how they work. Included examples:
-
-  - [`/flask`](/flask) - Python Flask and MySQL.
-    - Introduces `docker-compose`.
-  - [`/php`](/php) - PHP-FPM and Nginx.
-    - Introduces extra package installation.
-    - Introduces `HEALTHCHECK`.
-  - [`/symfony`](/symfony) - Symfony and SQLite.
-    - TODO.
-  - [`/traefik`](/traefik) - Traefik proxy.
-    - Introduces proxying of traffic for multiple hostnames on one port.
-    - Introduces the `.env` file.
-
-## License
-
-This project is licensed under the MIT open source license.
-
-## About the Author
-
-[Jeff Geerling](https://www.jeffgeerling.com/) is the author of [Ansible for DevOps](https://www.ansiblefordevops.com/) and manages tons of infrastructure, as well as open source projects like [Drupal VM](https://www.drupalvm.com/).
+> Note for Mac/Windows users: If you encounter performance issues with your app running inside Docker containers, and your app has many (e.g. 1,000+) files, it could be related to some filesystem performance issues with current versions of Docker. See [File access in mounted volumes extremely slow](https://forums.docker.com/t/file-access-in-mounted-volumes-extremely-slow-cpu-bound/8076/107).
+> 
+> This is a hard problem to solve, though the situation should improve as time goes on. For now, find ways to use volumes that aren't shared to your host whenever possible. You can also look into using tools like [docker-sync](https://docker-sync.io/) if you _must_ sync large numbers of files.
